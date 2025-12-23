@@ -68,3 +68,79 @@ dir), so building them locally with `cargo build` should use the `common` code f
 
 These provide the actual *functionality* the `common` package declares to exist (via its `.pm`
 files), in addition to the product specific parts.
+
+# ALT Linux SRPM audit (0.4.1-alt1) and NICE OS migration plan
+
+Ниже зафиксированы результаты разбора SRPM из ALT Linux
+`proxmox-perl-rs-0.4.1-alt1.src.rpm` и стратегия переноса на НАЙС.ОС.
+
+## Полный список патчей ALT Linux
+
+1. `proxmox-perl-rs-0.4.1.patch`
+   - Добавляет `.gear`-метаданные (spec, rules, tags, upstream remotes).
+   - Вносит упаковочную схему:
+     - новый корневой `Makefile` с созданием `build/`, копированием `common/`,
+       `pve-rs/`, `pmg-rs/`, разыменованием symlink-ов `common` и переносом
+       `common/pkg` в `common-pkg`.
+     - правки `common/pkg/Makefile`, `pmg-rs/Makefile`, `pve-rs/Makefile`:
+       отключение `dpkg`-инфраструктуры (`/usr/share/dpkg/pkg-info.mk`) и
+       добавление `--offline` для `cargo build`.
+   - Полностью заменяет `pve-rs/.cargo/config.toml`:
+     - включает `vendored-sources` и принудительный оффлайн билд,
+     - добавляет git-оверрайды на ALT/BASEALT-форки Proxmox библиотек,
+     - прокидывает дополнительные `rustflags`.
+   - Добавляет `pve-rs/Cargo.lock` и полный `pve-rs/vendor/` (cargo vendor),
+     включая `apt-pkg-native` и все зависимости.
+   - Содержит копию патча `0001-ALT-set-correct-context-not-None.patch`
+     в `.gear/` (он же применяется отдельно в spec).
+
+2. `0001-ALT-set-correct-context-not-None.patch`
+   - Меняет `pve-rs/vendor/proxmox-notify/src/context/mod.rs`.
+   - Вместо `None` по умолчанию сразу выбирает `PBSContext` или `PVEContext`
+     при включенном соответствующем feature-флаге.
+   - Цель: корректный контекст нотификаций без дополнительной инициализации.
+
+## Что и зачем они сделали (смысл изменений)
+
+- Перевели сборку на **полный оффлайн** (`cargo --offline`) и **vendored**
+  зависимости, чтобы сборка была воспроизводимой и не зависела от сети.
+- Заменили Debian-специфичную интеграцию `dpkg` на нейтральную схему
+  для RPM-сборок.
+- Привязали зависимости Proxmox к **собственным форкам**:
+  - `gitea.basealt.ru/Proxmox/proxmox.git`
+  - `gitea.basealt.ru/Proxmox/apt-pkg-native.git`
+  - upstream `git.proxmox.com` для `perlmod` и `proxmox-ve-rs`
+- Исправили поведение `proxmox-notify`, чтобы контекст был задан
+  сразу на старте (PBS/PVE), а не оставался `None`.
+
+## Стратегия переноса патчей на НАЙС.ОС
+
+1. Повторить **vendored/offline** подход:
+   - выполнить `cargo vendor` и сохранить `pve-rs/vendor/`,
+   - зафиксировать `pve-rs/Cargo.lock`,
+   - переключить `.cargo/config.toml` на `vendored-sources` и `--offline`.
+2. Перенести нейтральные Makefile-правки:
+   - убрать зависимость от `dpkg`-макросов,
+   - включить `--offline` для release-сборок.
+3. Внести патч `0001-ALT-set-correct-context-not-None.patch` в дерево
+   (или перенести изменение напрямую в исходники `proxmox-notify`).
+4. Подготовить `spec`- или аналогичный файл для пакета НАЙС.ОС,
+   повторив логику ALT: сборка только из `pve-rs`, затем сборка `common/pkg`.
+
+## Перевод репозиториев ALT на НАЙС.ОС (TODO)
+
+Ниже перечислены git-источники, которые ALT использует в `.cargo/config.toml`,
+и которые нужно **зеркалировать или форкнуть** под НАЙС.ОС:
+
+- `gitea.basealt.ru/Proxmox/proxmox.git` (proxmox-* crates)
+- `gitea.basealt.ru/Proxmox/apt-pkg-native.git` (apt-rpm/alt-специфика)
+- `git.proxmox.com/git/perlmod.git` (perlmod)
+- `git.proxmox.com/git/proxmox-ve-rs.git` (proxmox-ve-config, proxmox-frr)
+
+TODO:
+- [ ] Развернуть зеркала этих репозиториев в инфраструктуре НАЙС.ОС.
+- [ ] Заменить URL-ы в `pve-rs/.cargo/config.toml` на NICE OS hosting.
+- [ ] Проверить, нужны ли ALT-специфичные патчи в `proxmox.git` и
+      перенести их отдельно (например, apt-rpm изменения).
+- [ ] Перевыполнить `cargo vendor` уже с NICE OS форками и обновить хеши.
+- [ ] Зафиксировать воспроизводимую сборку на НАЙС.ОС (offline + vendor).
