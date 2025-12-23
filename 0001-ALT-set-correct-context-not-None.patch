@@ -1,0 +1,29 @@
+From 3e04ed627631c0891a825c7011353f7ca863abf8 Mon Sep 17 00:00:00 2001
+From: Alexander Burmatov <thatman@altlinux.org>
+Date: Fri, 6 Sep 2024 16:01:29 +0300
+Subject: [PATCH] ALT: set correct context (not None)
+
+---
+ pve-rs/vendor/proxmox-notify/src/context/mod.rs | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/pve-rs/vendor/proxmox-notify/src/context/mod.rs b/pve-rs/vendor/proxmox-notify/src/context/mod.rs
+index c0a5a13b..aeaed9c9 100644
+--- a/pve-rs/vendor/proxmox-notify/src/context/mod.rs
++++ b/pve-rs/vendor/proxmox-notify/src/context/mod.rs
+@@ -32,8 +32,10 @@ pub trait Context: Send + Sync + Debug {
+     ) -> Result<Option<String>, Error>;
+ }
+ 
+-#[cfg(not(test))]
+-static CONTEXT: Mutex<Option<&'static dyn Context>> = Mutex::new(None);
++#[cfg(feature = "pbs-context")]
++static CONTEXT: Mutex<Option<&'static dyn Context>> = Mutex::new(Some(&pbs::PBSContext));
++#[cfg(feature = "pve-context")]
++static CONTEXT: Mutex<Option<&'static dyn Context>> = Mutex::new(Some(&pve::PVEContext));
+ #[cfg(test)]
+ static CONTEXT: Mutex<Option<&'static dyn Context>> = Mutex::new(Some(&test::TestContext));
+ 
+-- 
+2.42.2
+
