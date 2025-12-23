@@ -1,4 +1,4 @@
-# Code Organization
+# Code Organization .tmp
 
 In order to have accessible documentation, all the perl packages should be put
 into the `bindings` module and exported by their package name converted to
